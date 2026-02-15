@@ -12,10 +12,7 @@ RESPONSE_FILE = os.path.join(BASE_DIR, "response.txt")
 CONNECT_SCRIPT = os.path.join(BASE_DIR, "connect.pyw")
 
 def ensure_connect_running():
-    # На Windows .pyw
     if os.name == "nt":
-        # Проверяем по имени процесса грубо: если нужно — можно усилить
-        # Здесь просто всегда пытаемся запустить, OS сама не создаст второй, если настроить иначе
         subprocess.Popen(["pythonw", CONNECT_SCRIPT], cwd=BASE_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
         subprocess.Popen(["python", CONNECT_SCRIPT], cwd=BASE_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
