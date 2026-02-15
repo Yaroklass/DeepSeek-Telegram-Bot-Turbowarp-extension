@@ -21,6 +21,28 @@ The extension communicates through a lightweight Python proxy server, enabling T
 | `manifest.json` | Extension metadata |
 | `icon.png` | Icon displayed in TurboWarp |
 | `server.py` | Local Python proxy server |
+| `connect.pyw` | Background network handler |
+
+---
+
+## Running TurboWarp Desktop with Sandbox Disabled
+
+This extension requires file read/write access (`command.txt`, `response.txt`) to communicate with the Python proxy.  
+TurboWarp Desktop blocks file access in sandbox mode, so you must launch it with sandbox disabled.
+
+### Windows
+
+[TurboWarp Desktop executable path] --disable-sandbox
+
+### macOS
+
+open [TurboWarp Desktop app path] --args --disable-sandbox
+
+### Linux
+
+[TurboWarp Desktop executable path] --disable-sandbox
+
+Without this flag, the extension will fail to load due to sandbox restrictions.
 
 ---
 
@@ -38,6 +60,7 @@ python server.py
 The server will start on:
 
 http://localhost:3000
+
 4. Upload all extension files to GitHub (or any static hosting).
 5. Copy the raw URL of `extension.js`.
 6. Open TurboWarp Desktop → Extensions → Custom Extension.
@@ -50,6 +73,7 @@ http://localhost:3000
 Before using any blocks, call:
 
 set Telegram token [your token] and DeepSeek key [your key]
+
 Then create a loop:
 
 1. Call `get Telegram updates`
@@ -59,6 +83,7 @@ Then create a loop:
 3. Pass them into:
 
 reply with DeepSeek to [text] for chat [id]
+
 ---
 
 ## Example Logic
@@ -67,6 +92,7 @@ forever
 set updates to (get Telegram updates)
 if (last message text) ≠ ""
 reply with DeepSeek to (last message text) for chat (last chat id)
+
 ---
 
 ## Requirements
