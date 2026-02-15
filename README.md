@@ -1,70 +1,47 @@
 # DeepSeek Telegram Bot — TurboWarp Extension
 
-This repository contains a custom TurboWarp extension that allows you to create fully functional Telegram bots powered by the DeepSeek API.  
-The extension communicates through a lightweight Python proxy server, enabling Telegram and DeepSeek API access even inside TurboWarp Desktop’s sandbox.
+This repository contains a custom TurboWarp extension that allows you to build fully functional Telegram bots powered by the DeepSeek API — directly inside TurboWarp Web, without Python, proxies, or additional backend services.
+
+The extension communicates with Telegram and DeepSeek using standard HTTPS requests, supported in the browser environment.
+
+---
 
 ## Features
 
-- Receive Telegram updates (polling)
-- Extract message text and chat ID
-- Send plain Telegram messages
+- Receive Telegram updates (JSON)
+- Extract message text, chat ID, sender info
+- Send Telegram messages
 - Generate AI responses using DeepSeek API
-- Reply to users directly from TurboWarp
-- Works in TurboWarp Desktop via a local Python proxy
+- Download Telegram photos as Base64
+- Use JSON inside TurboWarp logic
 - Minimalistic, clean, no‑comment JavaScript code
+- Works **only** in TurboWarp Web (not Desktop)
+
+---
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `extension.js` | Main TurboWarp extension logic |
+| `extension.js` | Main TurboWarp extension logic (Web‑compatible) |
 | `manifest.json` | Extension metadata |
 | `icon.png` | Icon displayed in TurboWarp |
-| `server.py` | Local Python proxy server |
-| `connect.pyw` | Background network handler |
 
 ---
 
-## Running TurboWarp Desktop with Sandbox Disabled
+## Installation (TurboWarp Web)
 
-This extension requires file read/write access (`command.txt`, `response.txt`) to communicate with the Python proxy.  
-TurboWarp Desktop blocks file access in sandbox mode, so you must launch it with sandbox disabled.
+1. Open TurboWarp Web:
 
-### Windows
+https://turbowarp.org/editor
 
-[TurboWarp Desktop executable path] --disable-sandbox
+2. Go to:
 
-### macOS
+Extensions → Custom Extension
 
-open [TurboWarp Desktop app path] --args --disable-sandbox
+3. Paste the **raw URL** of `extension.js` from this repository.
 
-### Linux
-
-[TurboWarp Desktop executable path] --disable-sandbox
-
-Without this flag, the extension will fail to load due to sandbox restrictions.
-
----
-
-## Installation (TurboWarp Desktop)
-
-1. Install Python 3.8+ (recommended 3.10+).
-2. Install required Python packages:
-
-pip install flask requests
-
-3. Run the proxy server:
-
-python server.py
-
-The server will start on:
-
-http://localhost:3000
-
-4. Upload all extension files to GitHub (or any static hosting).
-5. Copy the raw URL of `extension.js`.
-6. Open TurboWarp Desktop → Extensions → Custom Extension.
-7. Paste the raw URL.
+4. The extension will appear in the blocks menu.
 
 ---
 
@@ -76,22 +53,62 @@ set Telegram token [your token] and DeepSeek key [your key]
 
 Then create a loop:
 
-1. Call `get Telegram updates`
-2. Read:
-   - `last message text`
-   - `last chat id`
-3. Pass them into:
+1. Call:
 
-reply with DeepSeek to [text] for chat [id]
+get Telegram updates (JSON)
+
+2. Parse the JSON using TurboWarp’s JSON blocks:
+   - extract last message text  
+   - extract last chat id  
+   - extract file_id (if photo)
+
+3. For text messages:
+
+set reply to (DeepSeek reply to [text])
+send message (reply) to chat (chat id)
+
+4. For photos:
+
+set base64 to (download Telegram photo [file_id])
+
+You can convert Base64 to a costume or store it.
+
+---
+
+## Blocks Overview
+
+### **1. set Telegram token [TG] and DeepSeek key [DS]**
+Stores your API keys inside the extension.
+
+### **2. get Telegram updates (JSON)**
+Returns raw JSON from:
+
+https://api.telegram.org/bot<TG>/getUpdates
+### **3. send message [MSG] to chat [CHAT]**
+Sends a plain text message.
+
+### **4. DeepSeek reply to [MSG]**
+Returns DeepSeek JSON response.
+
+### **5. download Telegram photo [FILEID]**
+Downloads a Telegram file and returns:
+
+data:image/png;base64,....
 
 ---
 
 ## Example Logic
 
 forever
-set updates to (get Telegram updates)
-if (last message text) ≠ ""
-reply with DeepSeek to (last message text) for chat (last chat id)
+set raw to (get Telegram updates (JSON))
+set text to (JSON extract "message.text" from raw)
+set chat to (JSON extract "message.chat.id" from raw)
+
+if <text != ""> then
+set ai to (DeepSeek reply to (text))
+send message (ai) to chat (chat)
+end
+end
 
 ---
 
@@ -99,10 +116,15 @@ reply with DeepSeek to (last message text) for chat (last chat id)
 
 - Telegram Bot Token
 - DeepSeek API Key
-- TurboWarp Desktop or Web
-- Python 3.8+
-- Flask
-- Requests
+- TurboWarp Web (not Desktop)
+- Internet connection
+
+---
+
+## Notes
+
+- This extension **does not work in TurboWarp Desktop** due to sandbox restrictions.
+- Works perfectly in TurboWarp Web because fetch() is allowed.
 
 ---
 
@@ -112,4 +134,4 @@ MIT License — feel free to modify and improve.
 
 ---
 
-### If you make something cool, send it — I’ll check it out and make it even easier to use!
+### If you build something cool, send it — I’ll help you make it even better!
