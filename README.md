@@ -19,6 +19,7 @@ The extension provides blocks for receiving messages, sending replies, and gener
 | `extension.js` | Main extension logic |
 | `manifest.json` | Extension metadata |
 | `icon.png` | Icon displayed in TurboWarp |
+| `server.py` | Server for project |
 
 ## Installation (TurboWarp)
 
