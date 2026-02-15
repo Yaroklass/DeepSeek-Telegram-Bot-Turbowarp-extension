@@ -1,0 +1,8 @@
+{
+  "id": "deepseek-telegram",
+  "name": "DeepSeek Telegram Bot",
+  "version": "1.0.0",
+  "description": "Create Telegram bots using DeepSeek API",
+  "icon": "icon.png",
+  "blocks": "extension.js"
+}
