@@ -25,7 +25,7 @@ The extension communicates with Telegram and DeepSeek using standard HTTPS reque
 |------|-------------|
 | `extension.js` | Main TurboWarp extension logic (Web‑compatible) |
 | `manifest.json` | Extension metadata |
-| `icon.png` | Icon displayed in TurboWarp |
+| `icon.png` | Icon displayed in TurboWarp (Not work) |
 
 ---
 
