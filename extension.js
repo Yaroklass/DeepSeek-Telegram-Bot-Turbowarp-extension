@@ -22,6 +22,7 @@
                 stamp: 0
             };
 
+            this.lastTriggeredStamp = 0;
             this.lastPollTime = 0;
         }
 
@@ -278,12 +279,7 @@
             };
         }
 
-        /* -------------------- BLOCK LOGIC -------------------- */
-
-        setTokens(args) {
-            this.tg = args.TG;
-            this.ds = args.DS;
-        }
+        /* -------------------- TRIGGER LOGIC -------------------- */
 
         async whenCommand(args) {
             const cmd = args.CMD.trim();
@@ -291,9 +287,15 @@
             await this.pollUpdates();
 
             if (!this.lastEvent.command) return false;
+            if (this.lastEvent.command !== cmd) return false;
 
-            return this.lastEvent.command === cmd;
+            if (this.lastTriggeredStamp === this.lastEvent.stamp) return false;
+
+            this.lastTriggeredStamp = this.lastEvent.stamp;
+            return true;
         }
+
+        /* -------------------- REPORTERS -------------------- */
 
         getCommandText() {
             return this.lastEvent.text || "";
@@ -307,6 +309,8 @@
             return this.lastEvent.chatId || "";
         }
 
+        /* -------------------- TELEGRAM SEND -------------------- */
+
         async sendMessage(args) {
             if (!this.tg) return;
             const chat = args.CHAT;
@@ -319,6 +323,8 @@
                 body: `chat_id=${encodeURIComponent(chat)}&text=${encodeURIComponent(msg)}`
             });
         }
+
+        /* -------------------- DEEPSEEK -------------------- */
 
         async deepseekReply(args) {
             if (!this.ds) return "";
@@ -373,7 +379,7 @@
             }
         }
 
-        /* -------------------- UNIVERSAL HTTP REQUEST -------------------- */
+        /* -------------------- UNIVERSAL HTTP -------------------- */
 
         async httpRequest(args) {
             const url = args.URL || "";
