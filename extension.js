@@ -1,6 +1,6 @@
-(function (Scratch) {                                                
+(function (Scratch) {
     if (!Scratch.extensions) {
-        throw new Error("Scratch extensions not supported.");
+        throw new Error("Scratch extensions not supported");
     }
 
     class DeepSeekTelegram {
@@ -129,19 +129,33 @@
                 ],
                 menus: {
                     commands: {
-                        items: (args) => this.getCommandsMenu(args)
+                        items: "getCommandsMenu"
                     },
                     values: {
-                        items: (args) => this.getValuesMenu(args)
+                        items: "getValuesMenu"
                     }
                 }
             };
         }
 
-        setTokens(args) {
-            this.tg = args.TG;
-            this.ds = args.DS;
+        /* -------------------- MENU PROVIDERS -------------------- */
+
+        getCommandsMenu() {
+            const arr = this.commands.slice();
+            arr.push("────────────");
+            arr.push("Add command…");
+            return arr;
         }
+
+        getValuesMenu() {
+            const arr = this.values.slice();
+            arr.push("────────────");
+            arr.push("Add value…");
+            arr.push("Delete value…");
+            return arr;
+        }
+
+        /* -------------------- COMMAND MANAGEMENT -------------------- */
 
         addCommand(args) {
             const name = (args.NAME || "").trim();
@@ -149,21 +163,6 @@
             if (!this.commands.includes(name)) {
                 this.commands.push(name);
             }
-        }
-
-        getCommandsMenu() {
-            const base = this.commands.slice();
-            base.push("────────────");
-            base.push("Add command…");
-            return base;
-        }
-
-        getValuesMenu() {
-            const base = this.values.slice();
-            base.push("────────────");
-            base.push("Add value…");
-            base.push("Delete value…");
-            return base;
         }
 
         addValue(args) {
@@ -188,6 +187,8 @@
             const name = (args.NAME || "").trim();
             return this.valueStore[name] || "";
         }
+
+        /* -------------------- TELEGRAM POLLING -------------------- */
 
         async pollUpdates() {
             const now = Date.now();
@@ -266,10 +267,18 @@
             };
         }
 
+        /* -------------------- BLOCK LOGIC -------------------- */
+
+        setTokens(args) {
+            this.tg = args.TG;
+            this.ds = args.DS;
+        }
+
         async whenCommand(args) {
             const cmd = args.CMD;
+
             if (cmd === "Add command…") {
-                const name = prompt("Enter new command name:");
+                const name = prompt("Enter new command:");
                 if (name) {
                     const trimmed = name.trim();
                     if (trimmed && !this.commands.includes(trimmed)) {
@@ -372,70 +381,3 @@
 
     Scratch.extensions.register(new DeepSeekTelegram());
 })(Scratch);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-       
-
