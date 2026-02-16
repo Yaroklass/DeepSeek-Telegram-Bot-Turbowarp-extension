@@ -1,8 +1,24 @@
 (function (Scratch) {
+    if (!Scratch.extensions) {
+        throw new Error("Scratch extensions not supported");
+    }
+
     class DeepSeekTelegram {
         constructor() {
             this.tg = "";
             this.ds = "";
+            this.commands = ["start", "message", "image", "messageandimage", "stop"];
+            this.values = [];
+            this.valueStore = {};
+            this.lastUpdateId = 0;
+            this.lastEvent = {
+                command: "",
+                text: "",
+                photo: "",
+                chatId: "",
+                stamp: 0
+            };
+            this.lastPollTime = 0;
         }
 
         getInfo() {
@@ -20,9 +36,39 @@
                         }
                     },
                     {
-                        opcode: "getUpdates",
+                        opcode: "addCommand",
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: "add Telegram command [NAME]",
+                        arguments: {
+                            NAME: { type: Scratch.ArgumentType.STRING }
+                        }
+                    },
+                    {
+                        opcode: "whenCommand",
+                        blockType: Scratch.BlockType.HAT,
+                        isEdgeActivated: true,
+                        text: "when Telegram command [CMD]",
+                        arguments: {
+                            CMD: {
+                                type: Scratch.ArgumentType.STRING,
+                                menu: "commands"
+                            }
+                        }
+                    },
+                    {
+                        opcode: "getCommandText",
                         blockType: Scratch.BlockType.REPORTER,
-                        text: "get Telegram updates (JSON)"
+                        text: "Telegram command text"
+                    },
+                    {
+                        opcode: "getCommandPhoto",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "Telegram command photo"
+                    },
+                    {
+                        opcode: "getChatId",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "Telegram chat id"
                     },
                     {
                         opcode: "sendMessage",
@@ -42,32 +88,53 @@
                         }
                     },
                     {
-                        opcode: "getPhotoBase64",
+                        opcode: "deepseekVisionReply",
                         blockType: Scratch.BlockType.REPORTER,
-                        text: "download Telegram photo [FILEID]",
+                        text: "DeepSeek vision reply to image [IMG] with text [TXT]",
                         arguments: {
-                            FILEID: { type: Scratch.ArgumentType.STRING }
+                            IMG: { type: Scratch.ArgumentType.STRING },
+                            TXT: { type: Scratch.ArgumentType.STRING }
                         }
                     },
                     {
-                        opcode: "jsonGet",
-                        blockType: Scratch.BlockType.REPORTER,
-                        text: "JSON get [PATH] from [JSON]",
+                        opcode: "addValue",
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: "Add value [NAME]",
                         arguments: {
-                            PATH: { type: Scratch.ArgumentType.STRING },
-                            JSON: { type: Scratch.ArgumentType.STRING }
+                            NAME: { type: Scratch.ArgumentType.STRING }
                         }
                     },
                     {
-                        opcode: "jsonHas",
-                        blockType: Scratch.BlockType.BOOLEAN,
-                        text: "JSON has [PATH] in [JSON]",
+                        opcode: "deleteValue",
+                        blockType: Scratch.BlockType.COMMAND,
+                        text: "Delete value [NAME]",
                         arguments: {
-                            PATH: { type: Scratch.ArgumentType.STRING },
-                            JSON: { type: Scratch.ArgumentType.STRING }
+                            NAME: {
+                                type: Scratch.ArgumentType.STRING,
+                                menu: "values"
+                            }
+                        }
+                    },
+                    {
+                        opcode: "getValue",
+                        blockType: Scratch.BlockType.REPORTER,
+                        text: "Telegram value [NAME]",
+                        arguments: {
+                            NAME: {
+                                type: Scratch.ArgumentType.STRING,
+                                menu: "values"
+                            }
                         }
                     }
-                ]
+                ],
+                menus: {
+                    commands: {
+                        items: (args) => this.getCommandsMenu(args)
+                    },
+                    values: {
+                        items: (args) => this.getValuesMenu(args)
+                    }
+                }
             };
         }
 
@@ -76,72 +143,232 @@
             this.ds = args.DS;
         }
 
-        async getUpdates() {
-            const r = await fetch(`https://api.telegram.org/bot${this.tg}/getUpdates`);
-            return await r.text();
+        addCommand(args) {
+            const name = (args.NAME || "").trim();
+            if (!name) return;
+            if (!this.commands.includes(name)) {
+                this.commands.push(name);
+            }
+        }
+
+        getCommandsMenu() {
+            const base = this.commands.slice();
+            base.push("────────────");
+            base.push("Add command…");
+            return base;
+        }
+
+        getValuesMenu() {
+            const base = this.values.slice();
+            base.push("────────────");
+            base.push("Add value…");
+            base.push("Delete value…");
+            return base;
+        }
+
+        addValue(args) {
+            const name = (args.NAME || "").trim();
+            if (!name) return;
+            if (!this.values.includes(name)) {
+                this.values.push(name);
+                this.valueStore[name] = "";
+            }
+        }
+
+        deleteValue(args) {
+            const name = (args.NAME || "").trim();
+            const i = this.values.indexOf(name);
+            if (i >= 0) {
+                this.values.splice(i, 1);
+                delete this.valueStore[name];
+            }
+        }
+
+        getValue(args) {
+            const name = (args.NAME || "").trim();
+            return this.valueStore[name] || "";
+        }
+
+        async pollUpdates() {
+            const now = Date.now();
+            if (now - this.lastPollTime < 800) return;
+            this.lastPollTime = now;
+            if (!this.tg) return;
+
+            const url = `https://api.telegram.org/bot${this.tg}/getUpdates?timeout=0&offset=${this.lastUpdateId + 1}`;
+            let res;
+            try {
+                res = await fetch(url);
+            } catch {
+                return;
+            }
+            if (!res.ok) return;
+
+            let data;
+            try {
+                data = await res.json();
+            } catch {
+                return;
+            }
+            if (!data.result || !data.result.length) return;
+
+            const update = data.result[data.result.length - 1];
+            this.lastUpdateId = update.update_id || this.lastUpdateId;
+
+            const msg = update.message || update.edited_message || null;
+            if (!msg) return;
+
+            const text = msg.text || "";
+            const chatId = msg.chat && msg.chat.id ? String(msg.chat.id) : "";
+            let photoBase64 = "";
+
+            if (msg.photo && msg.photo.length) {
+                const fileId = msg.photo[msg.photo.length - 1].file_id;
+                try {
+                    const infoRes = await fetch(
+                        `https://api.telegram.org/bot${this.tg}/getFile?file_id=${fileId}`
+                    );
+                    const infoJson = await infoRes.json();
+                    const path = infoJson.result && infoJson.result.file_path;
+                    if (path) {
+                        const fileRes = await fetch(
+                            `https://api.telegram.org/file/bot${this.tg}/${path}`
+                        );
+                        const blob = await fileRes.blob();
+                        photoBase64 = await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                    }
+                } catch {
+                    photoBase64 = "";
+                }
+            }
+
+            let commandName = "";
+            let commandText = "";
+
+            if (text.startsWith("/")) {
+                const spaceIndex = text.indexOf(" ");
+                const rawCmd = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
+                const rest = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
+                commandName = rawCmd;
+                commandText = rest;
+            }
+
+            this.lastEvent = {
+                command: commandName,
+                text: commandText,
+                photo: photoBase64,
+                chatId: chatId,
+                stamp: Date.now()
+            };
+        }
+
+        async whenCommand(args) {
+            const cmd = args.CMD;
+            if (cmd === "Add command…") {
+                const name = prompt("Enter new command name:");
+                if (name) {
+                    const trimmed = name.trim();
+                    if (trimmed && !this.commands.includes(trimmed)) {
+                        this.commands.push(trimmed);
+                    }
+                }
+                return false;
+            }
+
+            await this.pollUpdates();
+
+            if (!this.lastEvent.command) return false;
+            if (cmd === "────────────") return false;
+
+            return this.lastEvent.command === cmd;
+        }
+
+        getCommandText() {
+            return this.lastEvent.text || "";
+        }
+
+        getCommandPhoto() {
+            return this.lastEvent.photo || "";
+        }
+
+        getChatId() {
+            return this.lastEvent.chatId || "";
         }
 
         async sendMessage(args) {
+            if (!this.tg) return;
+            const chat = args.CHAT;
+            const msg = args.MSG;
+            if (!chat) return;
+
             await fetch(`https://api.telegram.org/bot${this.tg}/sendMessage`, {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `chat_id=${args.CHAT}&text=${encodeURIComponent(args.MSG)}`
+                body: `chat_id=${encodeURIComponent(chat)}&text=${encodeURIComponent(msg)}`
             });
         }
 
         async deepseekReply(args) {
-            const r = await fetch("https://api.deepseek.com/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${this.ds}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    model: "deepseek-chat",
-                    messages: [{ role: "user", content: args.MSG }]
-                })
-            });
-            return await r.text();
-        }
-
-        async getPhotoBase64(args) {
-            const info = await fetch(
-                `https://api.telegram.org/bot${this.tg}/getFile?file_id=${args.FILEID}`
-            );
-            const json = await info.json();
-            const path = json.result.file_path;
-
-            const file = await fetch(
-                `https://api.telegram.org/file/bot${this.tg}/${path}`
-            );
-            const blob = await file.blob();
-
-            return await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
-        }
-
-        jsonGet(args) {
+            if (!this.ds) return "";
+            const msg = args.MSG || "";
             try {
-                const obj = JSON.parse(args.JSON);
-                return args.PATH.split(".").reduce((o, k) => (o ? o[k] : ""), obj) ?? "";
+                const r = await fetch("https://api.deepseek.com/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${this.ds}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "deepseek-chat",
+                        messages: [{ role: "user", content: msg }]
+                    })
+                });
+                const j = await r.json();
+                const choice = j.choices && j.choices[0];
+                const content = choice && choice.message && choice.message.content;
+                return content || "";
             } catch {
                 return "";
             }
         }
 
-        jsonHas(args) {
+        async deepseekVisionReply(args) {
+            if (!this.ds) return "";
+            const img = args.IMG || "";
+            const txt = args.TXT || "";
             try {
-                const obj = JSON.parse(args.JSON);
-                return args.PATH.split(".").every(k => (obj = obj?.[k]) !== undefined); 
+                const r = await fetch("https://api.deepseek.com/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${this.ds}`,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "deepseek-chat",
+                        messages: [
+                            {
+                                role: "user",
+                                content: [
+                                    { type: "text", text: txt },
+                                    { type: "image_url", image_url: { url: img } }
+                                ]
+                            }
+                        ]
+                    })
+                });
+                const j = await r.json();
+                const choice = j.choices && j.choices[0];
+                const content = choice && choice.message && choice.message.content;
+                return content || "";
             } catch {
-                return false;
+                return "";
             }
         }
     }
 
     Scratch.extensions.register(new DeepSeekTelegram());
 })(Scratch);
-
