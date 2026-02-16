@@ -49,10 +49,7 @@
                         isEdgeActivated: true,
                         text: "when Telegram command [CMD]",
                         arguments: {
-                            CMD: {
-                                type: Scratch.ArgumentType.STRING,
-                                menu: "commands"
-                            }
+                            CMD: { type: Scratch.ArgumentType.STRING }
                         }
                     },
                     {
@@ -117,32 +114,11 @@
                         blockType: Scratch.BlockType.REPORTER,
                         text: "Telegram value [NAME]",
                         arguments: {
-                            NAME: {
-                                type: Scratch.ArgumentType.STRING,
-                                menu: "values"
-                            }
+                            NAME: { type: Scratch.ArgumentType.STRING }
                         }
                     }
-                ],
-                menus: {
-                    commands: {
-                        items: "getCommandsMenu"
-                    },
-                    values: {
-                        items: "getValuesMenu"
-                    }
-                }
+                ]
             };
-        }
-
-        /* -------------------- MENU PROVIDERS -------------------- */
-
-        getCommandsMenu() {
-            return this.commands.slice();
-        }
-
-        getValuesMenu() {
-            return this.values.slice();
         }
 
         /* -------------------- COMMAND MANAGEMENT -------------------- */
@@ -265,7 +241,7 @@
         }
 
         async whenCommand(args) {
-            const cmd = args.CMD;
+            const cmd = args.CMD.trim();
 
             await this.pollUpdates();
 
