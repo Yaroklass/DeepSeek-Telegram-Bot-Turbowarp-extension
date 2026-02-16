@@ -1,4 +1,4 @@
-(function (Scratch) {
+(function (Scratch) {                                                
     if (!Scratch.extensions) {
         throw new Error("Scratch extensions not supported");
     }
@@ -372,3 +372,4 @@
 
     Scratch.extensions.register(new DeepSeekTelegram());
 })(Scratch);
+
