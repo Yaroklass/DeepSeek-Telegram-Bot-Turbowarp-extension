@@ -167,7 +167,7 @@
         /* -------------------- SYSTEM POLLING -------------------- */
 
         poll() {
-            await this.pollUpdates();
+            this.pollUpdates();
             return false;
         }
 
@@ -417,5 +417,6 @@
 
     Scratch.extensions.register(new DeepSeekTelegram());
 })(Scratch);
+
 
 
