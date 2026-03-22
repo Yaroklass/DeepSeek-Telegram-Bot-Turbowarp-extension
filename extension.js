@@ -24,12 +24,15 @@
 
             this.lastTriggeredStamp = 0;
             this.lastPollTime = 0;
+            this.pendingUpdates = [];
         }
 
         getInfo() {
             return {
                 id: "deepseektelegram",
                 name: "DeepSeek Telegram Bot",
+                color1: "#4A90E2",
+                color2: "#357ABD",
                 blocks: [
                     {
                         opcode: "poll",
@@ -165,14 +168,12 @@
         }
 
         /* -------------------- SYSTEM POLLING -------------------- */
-
-        poll() {
-            this.pollUpdates();
+        async poll() {
+            await this.pollUpdates();
             return false;
         }
 
         /* -------------------- VALUE STORAGE -------------------- */
-
         addValue(args) {
             const name = (args.NAME || "").trim();
             if (!name) return;
@@ -204,7 +205,6 @@
         }
 
         /* -------------------- COMMAND MANAGEMENT -------------------- */
-
         addCommand(args) {
             const name = (args.NAME || "").trim();
             if (!name) return;
@@ -214,7 +214,6 @@
         }
 
         /* -------------------- TELEGRAM POLLING -------------------- */
-
         async pollUpdates() {
             const now = Date.now();
             if (now - this.lastPollTime < 800) return;
@@ -226,7 +225,8 @@
             let res;
             try {
                 res = await fetch(url);
-            } catch {
+            } catch (e) {
+                console.error("Telegram fetch error:", e);
                 return;
             }
             if (!res.ok) return;
@@ -234,83 +234,104 @@
             let data;
             try {
                 data = await res.json();
-            } catch {
+            } catch (e) {
+                console.error("JSON parse error:", e);
                 return;
             }
-            if (!data.result || !data.result.length) return;
+            
+            if (!data.ok || !data.result || !data.result.length) return;
 
-            const update = data.result[data.result.length - 1];
-            this.lastUpdateId = update.update_id || this.lastUpdateId;
-
-            const msg = update.message || update.edited_message || null;
-            if (!msg) return;
-
-            const text = msg.text || "";
-            const chatId = msg.chat && msg.chat.id ? String(msg.chat.id) : "";
-            let photoBase64 = "";
-
-            if (msg.photo && msg.photo.length) {
-                const fileId = msg.photo[msg.photo.length - 1].file_id;
-                try {
-                    const infoRes = await fetch(
-                        `https://api.telegram.org/bot${this.tg}/getFile?file_id=${fileId}`
-                    );
-                    const infoJson = await infoRes.json();
-                    const path = infoJson.result && infoJson.result.file_path;
-                    if (path) {
-                        const fileRes = await fetch(
-                            `https://api.telegram.org/file/bot${this.tg}/${path}`
-                        );
-                        const blob = await fileRes.blob();
-                        photoBase64 = await new Promise((resolve) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => resolve(reader.result);
-                            reader.readAsDataURL(blob);
-                        });
-                    }
-                } catch {
-                    photoBase64 = "";
+            // Process all updates
+            for (const update of data.result) {
+                if (update.update_id > this.lastUpdateId) {
+                    this.lastUpdateId = update.update_id;
                 }
+                
+                const msg = update.message || update.edited_message || null;
+                if (!msg) continue;
+
+                const text = msg.text || "";
+                const chatId = msg.chat && msg.chat.id ? String(msg.chat.id) : "";
+                let photoBase64 = "";
+
+                // Handle photo if present
+                if (msg.photo && msg.photo.length) {
+                    const fileId = msg.photo[msg.photo.length - 1].file_id;
+                    try {
+                        const infoRes = await fetch(
+                            `https://api.telegram.org/bot${this.tg}/getFile?file_id=${fileId}`
+                        );
+                        const infoJson = await infoRes.json();
+                        const path = infoJson.result && infoJson.result.file_path;
+                        if (path) {
+                            const fileRes = await fetch(
+                                `https://api.telegram.org/file/bot${this.tg}/${path}`
+                            );
+                            const blob = await fileRes.blob();
+                            photoBase64 = await new Promise((resolve) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.readAsDataURL(blob);
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Photo fetch error:", e);
+                        photoBase64 = "";
+                    }
+                }
+
+                let commandName = "";
+                let commandText = "";
+
+                if (text.startsWith("/")) {
+                    const spaceIndex = text.indexOf(" ");
+                    const rawCmd = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
+                    const rest = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
+                    commandName = rawCmd;
+                    commandText = rest;
+                }
+
+                // Store the event
+                this.lastEvent = {
+                    command: commandName,
+                    text: commandText,
+                    photo: photoBase64,
+                    chatId: chatId,
+                    stamp: Date.now() + Math.random() // Ensure unique stamp
+                };
+                
+                // Add to pending updates for processing
+                this.pendingUpdates.push({...this.lastEvent});
             }
-
-            let commandName = "";
-            let commandText = "";
-
-            if (text.startsWith("/")) {
-                const spaceIndex = text.indexOf(" ");
-                const rawCmd = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex);
-                const rest = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
-                commandName = rawCmd;
-                commandText = rest;
-            }
-
-            this.lastEvent = {
-                command: commandName,
-                text: commandText,
-                photo: photoBase64,
-                chatId: chatId,
-                stamp: Date.now()
-            };
         }
 
         /* -------------------- TRIGGER LOGIC -------------------- */
-
         async whenCommand(args) {
             const cmd = args.CMD.trim();
-
+            
+            // Poll for updates first
             await this.pollUpdates();
-
-            if (!this.lastEvent.command) return false;
-            if (this.lastEvent.command !== cmd) return false;
-
-            if (this.lastTriggeredStamp === this.lastEvent.stamp) return false;
-
-            this.lastTriggeredStamp = this.lastEvent.stamp;
-            return true;
+            
+            // Check if we have any pending updates
+            if (this.pendingUpdates.length === 0) return false;
+            
+            // Find the first matching command in pending updates
+            for (let i = 0; i < this.pendingUpdates.length; i++) {
+                const event = this.pendingUpdates[i];
+                if (event.command === cmd) {
+                    // Remove this event from pending
+                    this.pendingUpdates.splice(i, 1);
+                    // Set as current event
+                    this.lastEvent = event;
+                    this.lastTriggeredStamp = event.stamp;
+                    return true;
+                }
+            }
+            
+            return false;
         }
 
         /* -------------------- REPORTERS -------------------- */
-
         getCommandText() {
             return this.lastEvent.text || "";
         }
@@ -324,22 +345,24 @@
         }
 
         /* -------------------- TELEGRAM SEND -------------------- */
-
         async sendMessage(args) {
             if (!this.tg) return;
             const chat = args.CHAT;
             const msg = args.MSG;
             if (!chat) return;
 
-            await fetch(`https://api.telegram.org/bot${this.tg}/sendMessage`, {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: `chat_id=${encodeURIComponent(chat)}&text=${encodeURIComponent(msg)}`
-            });
+            try {
+                await fetch(`https://api.telegram.org/bot${this.tg}/sendMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: `chat_id=${encodeURIComponent(chat)}&text=${encodeURIComponent(msg)}`
+                });
+            } catch (e) {
+                console.error("Send message error:", e);
+            }
         }
 
         /* -------------------- DEEPSEEK -------------------- */
-
         async deepseekReply(args) {
             if (!this.ds) return "";
             const msg = args.MSG || "";
@@ -357,7 +380,8 @@
                 });
                 const j = await r.json();
                 return j.choices?.[0]?.message?.content || "";
-            } catch {
+            } catch (e) {
+                console.error("DeepSeek error:", e);
                 return "";
             }
         }
@@ -388,13 +412,13 @@
                 });
                 const j = await r.json();
                 return j.choices?.[0]?.message?.content || "";
-            } catch {
+            } catch (e) {
+                console.error("DeepSeek vision error:", e);
                 return "";
             }
         }
 
         /* -------------------- UNIVERSAL HTTP -------------------- */
-
         async httpRequest(args) {
             const url = args.URL || "";
             const body = args.BODY || "";
@@ -417,6 +441,3 @@
 
     Scratch.extensions.register(new DeepSeekTelegram());
 })(Scratch);
-
-
-
